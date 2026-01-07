@@ -4,6 +4,7 @@ import threading
 import json
 import csv
 import time
+import ipaddress
 from datetime import datetime
 
 # =====================================================
@@ -69,14 +70,20 @@ class ExposureScanner:
             data = sock.recv(128)
             sock.close()
             return data.decode(errors="ignore").strip()
-        except:
+        except Exception:
             return "No banner information"
 
     def scan_port(self, port, meta):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(2)
-            result = sock.connect_ex((self.target, port))
+
+            try:
+                result = sock.connect_ex((self.target, port))
+            except socket.gaierror:
+                sock.close()
+                return
+
             sock.close()
 
             if result == 0:
@@ -117,7 +124,7 @@ class ExposureScanner:
 
 def export_csv(scanner):
     filename = f"assessment_{scanner.target}.csv"
-    with open(filename, "w", newline="") as f:
+    with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=scanner.findings[0].keys())
         writer.writeheader()
         writer.writerows(scanner.findings)
@@ -125,13 +132,14 @@ def export_csv(scanner):
 
 def export_json(scanner):
     filename = f"assessment_{scanner.target}.json"
-    with open(filename, "w") as f:
+    with open(filename, "w", encoding="utf-8") as f:
         json.dump(scanner.findings, f, indent=4)
     return filename
 
+
 def export_html(scanner):
     filename = f"assessment_{scanner.target}.html"
-    with open(filename, "w") as f:
+    with open(filename, "w", encoding="utf-8") as f:
         f.write("<html><head><title>Exposure Assessment Report</title></head><body>")
         f.write("<h1>Legacy System Exposure Assessment</h1>")
         f.write(f"<p><b>Target:</b> {scanner.target}</p>")
@@ -164,6 +172,15 @@ def main():
     )
     parser.add_argument("target", help="Target IP address")
     args = parser.parse_args()
+
+    # -------- INPUT VALIDATION --------
+    try:
+        ipaddress.ip_address(args.target)
+    except ValueError:
+        print(f"[!] Invalid IP address provided: {args.target}")
+        print("[!] Please provide a valid IPv4 address.")
+        return
+    # --------------------------------
 
     print("\n[+] Starting Exposure Assessment")
     print(f"[+] Target: {args.target}")
